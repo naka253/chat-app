@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0"
+/>
+
+<title>チャットアプリ</title>
+
+<style>
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+  font-family:sans-serif;
+}
+
+html,body{
+  width:100%;
+  height:100%;
+  overflow:hidden;
+  background:#1e1f22;
+  color:white;
+}
+
+/* ログイン */
+#loginScreen{
+  position:fixed;
+  inset:0;
+
+  display:flex;
+  justify-content:center;
+  align-items:center;
+
+  padding:20px;
+}
+
+.card{
+  width:100%;
+  max-width:400px;
+
+  background:#2b2d31;
+
+  padding:30px;
+
+  border-radius:16px;
+
+  display:flex;
+  flex-direction:column;
+  gap:15px;
+}
+
+.card h1{
+  text-align:center;
+}
+
+input,
+textarea{
+  padding:14px;
+
+  border:none;
+
+  border-radius:10px;
+
+  font-size:16px;
+
+  outline:none;
+}
+
+/* ボタン */
+button{
+  padding:12px;
+
+  border:none;
+
+  border-radius:10px;
+
+  cursor:pointer;
+
+  color:black;
+}
+
+/* 個別 */
+#joinBtn{
+  background:#5865f2;
+}
+
+#joinVoiceBtn{
+  background:#16a34a;
+}
+
+#muteBtn{
+  background:#ca8a04;
+}
+
+#leaveVoiceBtn{
+  background:#dc2626;
+}
+
+#resetBtn{
+  background:#ef4444;
+}
+
+#leaveBtn{
+  background:#555;
+}
+
+/* チャット */
+#chatScreen{
+  display:none;
+
+  position:fixed;
+  inset:0;
+
+  flex-direction:column;
+}
+
+.topbar{
+  background:#111214;
+
+  padding:10px;
+
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+
+  gap:10px;
+}
+
+.topbar-right{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+/* メッセージ */
+#messages{
+  flex:1;
+
+  overflow-y:auto;
+
+  padding:15px;
+
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.message{
+  max-width:80%;
+
+  padding:12px;
+
+  border-radius:12px;
+
+  word-break:break-word;
+}
+
+.mine{
+  align-self:flex-end;
+
+  background:#5865f2;
+}
+
+.other{
+  align-self:flex-start;
+
+  background:#313338;
+}
+
+.system{
+  align-self:center;
+
+  background:#444;
+
+  padding:8px 14px;
+
+  border-radius:999px;
+
+  font-size:14px;
+}
+
+.username{
+  font-size:12px;
+
+  opacity:0.7;
+
+  margin-bottom:4px;
+}
+
+/* 入力 */
+#messageForm{
+  display:flex;
+
+  gap:10px;
+
+  padding:10px;
+
+  background:#111214;
+}
+
+#messageInput{
+  flex:1;
+
+  resize:none;
+
+  min-height:50px;
+  max-height:120px;
+
+  overflow-y:auto;
+}
+
+/* オンライン */
+#onlineCount{
+  font-size:13px;
+  margin-top:4px;
+}
+
+#onlineUsers{
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+  margin-top:5px;
+}
+
+/* スマホ */
+@media(max-width:600px){
+
+  .topbar{
+    flex-direction:column;
+    align-items:flex-start;
+  }
+
+  .message{
+    max-width:95%;
+  }
+
+  button{
+    font-size:14px;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<!-- ログイン -->
+<div id="loginScreen">
+
+  <div class="card">
+
+    <h1>チャットルーム</h1>
+
+    <input
+      type="text"
+      id="usernameInput"
+      placeholder="名前"
+    />
+
+    <button id="joinBtn">
+      入室
+    </button>
+
+  </div>
+
+</div>
+
+<!-- チャット -->
+<div id="chatScreen">
+
+  <header class="topbar">
+
+    <div>
+
+      <h2>チャット</h2>
+
+      <div id="myName"></div>
+
+      <div id="onlineCount">
+        🟢 0人オンライン
+      </div>
+
+      <div id="onlineUsers"></div>
+
+    </div>
+
+    <div class="topbar-right">
+
+      <button id="joinVoiceBtn">
+        VC参加
+      </button>
+
+      <button id="muteBtn">
+        ミュート
+      </button>
+
+      <button id="leaveVoiceBtn">
+        VC退出
+      </button>
+
+      <button id="resetBtn">
+        リセット
+      </button>
+
+      <button id="leaveBtn">
+        退出
+      </button>
+
+    </div>
+
+  </header>
+
+  <main id="messages"></main>
+
+  <form id="messageForm">
+
+    <textarea
+      id="messageInput"
+      placeholder="メッセージ"
+    ></textarea>
+
+    <button type="submit">
+      送信
+    </button>
+
+  </form>
+
+</div>
+
+<script type="module">
+
+import { createClient }
+from "https://esm.sh/@supabase/supabase-js@2";
+
+/* Supabase */
+const SUPABASE_URL =
+"https://pckmtoxyyzociqkfgwan.supabase.co";
+
+const SUPABASE_KEY =
+"sb_publishable_mP9R6oS3wxN10FTHynaTuA_0hrGCdWh";
+
+const db = createClient(
+  SUPABASE_URL,
+  SUPABASE_KEY
+);
+
+/* 要素 */
+const loginScreen =
+document.getElementById("loginScreen");
+
+const chatScreen =
+document.getElementById("chatScreen");
+
+const usernameInput =
+document.getElementById("usernameInput");
+
+const joinBtn =
+document.getElementById("joinBtn");
+
+const myName =
+document.getElementById("myName");
+
+const messages =
+document.getElementById("messages");
+
+const messageForm =
+document.getElementById("messageForm");
+
+const messageInput =
+document.getElementById("messageInput");
+
+const joinVoiceBtn =
+document.getElementById("joinVoiceBtn");
+
+const muteBtn =
+document.getElementById("muteBtn");
+
+const leaveVoiceBtn =
+document.getElementById("leaveVoiceBtn");
+
+const resetBtn =
+document.getElementById("resetBtn");
+
+const leaveBtn =
+document.getElementById("leaveBtn");
+
+/* 管理者パス */
+const ADMIN_PASSWORD =
+"0525";
+
+let username = "";
+
+let localStream = null;
+
+let peerConnections = {};
+
+let isMuted = false;
+
+/* WebRTC */
+const servers = {
+  iceServers:[
+    {
+      urls:
+      "stun:stun.l.google.com:19302"
+    }
+  ]
+};
+
+/* 入室 */
+joinBtn.addEventListener(
+  "click",
+  async()=>{
+
+    const name =
+    usernameInput.value.trim();
+
+    if(!name){
+
+      alert("名前を入力");
+
+      return;
+    }
+
+    username = name;
+
+    myName.textContent =
+    username;
+
+    loginScreen.style.display =
+    "none";
+
+    chatScreen.style.display =
+    "flex";
+
+    await loadMessages();
+
+    await addSystemMessage(
+      `${username} が入室しました`
+    );
+
+    await db
+    .from("online_users")
+    .insert({
+      username
+    });
+
+    loadOnlineUsers();
+  }
+);
+
+/* Enter入室 */
+usernameInput.addEventListener(
+  "keydown",
+  (e)=>{
+
+    if(e.key === "Enter"){
+
+      joinBtn.click();
+    }
+  }
+);
+
+/* メッセージ取得 */
+async function loadMessages(){
+
+  const { data, error } =
+  await db
+  .from("messages")
+  .select("*")
+  .order("created_at");
+
+  if(error){
+
+    console.error(error);
+
+    return;
+  }
+
+  messages.innerHTML = "";
+
+  data.forEach(msg=>{
+
+    renderMessage(msg);
+  });
+
+  scrollBottom();
+}
+
+/* 表示 */
+function renderMessage(data){
+
+  const div =
+  document.createElement("div");
+
+  if(data.type === "system"){
+
+    div.className = "system";
+
+    div.textContent = data.text;
+
+  }else{
+
+    div.className = "message";
+
+    div.classList.add(
+      data.username === username
+      ? "mine"
+      : "other"
+    );
+
+    div.innerHTML = `
+      <div class="username">
+        ${escapeHtml(data.username)}
+      </div>
+
+      <div>
+        ${escapeHtml(data.text)}
+      </div>
+    `;
+  }
+
+  messages.appendChild(div);
+
+  scrollBottom();
+}
+
+/* 送信 */
+messageForm.addEventListener(
+  "submit",
+  async(e)=>{
+
+    e.preventDefault();
+
+    const text =
+    messageInput.value.trim();
+
+    if(!text) return;
+
+    messageInput.value = "";
+
+    await db
+    .from("messages")
+    .insert({
+      username,
+      text,
+      type:"message"
+    });
+  }
+);
+
+/* Enter送信 */
+messageInput.addEventListener(
+  "keydown",
+  (e)=>{
+
+    if(
+      e.key === "Enter" &&
+      !e.shiftKey
+    ){
+
+      e.preventDefault();
+
+      messageForm.requestSubmit();
+    }
+  }
+);
+
+/* システム */
+async function addSystemMessage(text){
+
+  await db
+  .from("messages")
+  .insert({
+    username:"system",
+    text,
+    type:"system"
+  });
+}
+
+/* リセット */
+resetBtn.addEventListener(
+  "click",
+  async()=>{
+
+    const password =
+    prompt(
+      "管理者パスワード"
+    );
+
+    if(password === null){
+      return;
+    }
+
+    if(
+      password !==
+      ADMIN_PASSWORD
+    ){
+
+      alert(
+        "パスワード違います"
+      );
+
+      return;
+    }
+
+    const ok =
+    confirm(
+      "全チャット削除？"
+    );
+
+    if(!ok) return;
+
+    await db
+    .from("messages")
+    .delete()
+    .neq("id",0);
+
+    messages.innerHTML = "";
+
+    await addSystemMessage(
+      "チャットがリセットされました"
+    );
+  }
+);
+
+/* 退出 */
+leaveBtn.addEventListener(
+  "click",
+  async()=>{
+
+    await addSystemMessage(
+      `${username} が退出しました`
+    );
+
+    await db
+    .from("online_users")
+    .delete()
+    .eq("username",username);
+
+    location.reload();
+  }
+);
+
+/* realtime */
+db
+.channel("room1")
+
+.on(
+  "postgres_changes",
+  {
+    event:"INSERT",
+    schema:"public",
+    table:"messages"
+  },
+
+  (payload)=>{
+
+    renderMessage(
+      payload.new
+    );
+  }
+)
+
+.subscribe();
+
+/* オンライン */
+async function loadOnlineUsers(){
+
+  const { data } =
+  await db
+  .from("online_users")
+  .select("*");
+
+  const uniqueUsers =
+  [...new Set(
+    data.map(
+      u=>u.username
+    )
+  )];
+
+  document.getElementById(
+    "onlineCount"
+  ).textContent =
+  `🟢 ${uniqueUsers.length}人オンライン`;
+
+  const container =
+  document.getElementById(
+    "onlineUsers"
+  );
+
+  container.innerHTML = "";
+
+  uniqueUsers.forEach(user=>{
+
+    if(user === username)
+    return;
+
+    const btn =
+    document.createElement(
+      "button"
+    );
+
+    btn.textContent =
+    `📞 ${user}`;
+
+    btn.onclick = ()=>{
+
+      callUser(user);
+    };
+
+    container.appendChild(btn);
+  });
+}
+
+/* 更新 */
+setInterval(
+  loadOnlineUsers,
+  3000
+);
+
+/* VC参加 */
+joinVoiceBtn.addEventListener(
+  "click",
+  async()=>{
+
+    try{
+
+      localStream =
+      await navigator
+      .mediaDevices
+      .getUserMedia({
+        audio:true
+      });
+
+      await addSystemMessage(
+        `${username} がVC参加`
+      );
+
+      alert("VC参加");
+
+    }catch(err){
+
+      console.error(err);
+
+      alert(
+        "マイク許可必要"
+      );
+    }
+  }
+);
+
+/* peer */
+async function createPeer(target){
+
+  const pc =
+  new RTCPeerConnection(
+    servers
+  );
+
+  peerConnections[target] =
+  pc;
+
+  localStream
+  .getTracks()
+  .forEach(track=>{
+
+    pc.addTrack(
+      track,
+      localStream
+    );
+  });
+
+  /* 相手音 */
+  pc.ontrack = (event)=>{
+
+    const audio =
+    document.createElement(
+      "audio"
+    );
+
+    audio.srcObject =
+    event.streams[0];
+
+    audio.autoplay = true;
+
+    document.body
+    .appendChild(audio);
+  };
+
+  /* ICE */
+  pc.onicecandidate =
+  async(event)=>{
+
+    if(event.candidate){
+
+      await sendSignal(
+        target,
+        "ice",
+        event.candidate
+      );
+    }
+  };
+
+  return pc;
+}
+
+/* signal */
+async function sendSignal(
+  receiver,
+  type,
+  data
+){
+
+  await db
+  .from("voice_signals")
+  .insert({
+
+    sender:username,
+
+    receiver,
+
+    type,
+
+    data
+  });
+}
+
+/* call */
+async function callUser(target){
+
+  if(!localStream){
+
+    alert(
+      "先にVC参加"
+    );
+
+    return;
+  }
+
+  const pc =
+  await createPeer(target);
+
+  const offer =
+  await pc.createOffer();
+
+  await pc.setLocalDescription(
+    offer
+  );
+
+  await sendSignal(
+    target,
+    "offer",
+    offer
+  );
+}
+
+/* VC realtime */
+db
+.channel("voice-signals")
+
+.on(
+  "postgres_changes",
+  {
+    event:"INSERT",
+    schema:"public",
+    table:"voice_signals"
+  },
+
+  async(payload)=>{
+
+    const signal =
+    payload.new;
+
+    if(
+      signal.receiver !==
+      username
+    ){
+      return;
+    }
+
+    if(
+      signal.sender ===
+      username
+    ){
+      return;
+    }
+
+    if(
+      !peerConnections[
+        signal.sender
+      ]
+    ){
+
+      await createPeer(
+        signal.sender
+      );
+    }
+
+    const pc =
+    peerConnections[
+      signal.sender
+    ];
+
+    /* offer */
+    if(
+      signal.type ===
+      "offer"
+    ){
+
+      await pc
+      .setRemoteDescription(
+        new RTCSessionDescription(
+          signal.data
+        )
+      );
+
+      const answer =
+      await pc.createAnswer();
+
+      await pc
+      .setLocalDescription(
+        answer
+      );
+
+      await sendSignal(
+        signal.sender,
+        "answer",
+        answer
+      );
+    }
+
+    /* answer */
+    if(
+      signal.type ===
+      "answer"
+    ){
+
+      await pc
+      .setRemoteDescription(
+        new RTCSessionDescription(
+          signal.data
+        )
+      );
+    }
+
+    /* ice */
+    if(
+      signal.type ===
+      "ice"
+    ){
+
+      try{
+
+        await pc
+        .addIceCandidate(
+          new RTCIceCandidate(
+            signal.data
+          )
+        );
+
+      }catch(err){
+
+        console.error(err);
+      }
+    }
+  }
+)
+
+.subscribe();
+
+/* ミュート */
+muteBtn.addEventListener(
+  "click",
+  ()=>{
+
+    if(!localStream)
+    return;
+
+    isMuted = !isMuted;
+
+    localStream
+    .getAudioTracks()
+    .forEach(track=>{
+
+      track.enabled =
+      !isMuted;
+    });
+
+    muteBtn.textContent =
+    isMuted
+    ? "ミュート解除"
+    : "ミュート";
+  }
+);
+
+/* VC退出 */
+leaveVoiceBtn.addEventListener(
+  "click",
+  ()=>{
+
+    if(localStream){
+
+      localStream
+      .getTracks()
+      .forEach(track=>{
+
+        track.stop();
+      });
+    }
+
+    Object.values(
+      peerConnections
+    ).forEach(pc=>{
+
+      pc.close();
+    });
+
+    peerConnections = {};
+
+    localStream = null;
+
+    alert("VC退出");
+  }
+);
+
+/* スクロール */
+function scrollBottom(){
+
+  requestAnimationFrame(()=>{
+
+    messages.scrollTop =
+    messages.scrollHeight;
+  });
+}
+
+/* XSS */
+function escapeHtml(text){
+
+  const div =
+  document.createElement(
+    "div"
+  );
+
+  div.textContent = text;
+
+  return div.innerHTML;
+}
+
+/* タブ閉じ */
+window.addEventListener(
+  "beforeunload",
+  async()=>{
+
+    if(username){
+
+      await db
+      .from("online_users")
+      .delete()
+      .eq("username",username);
+
+      await addSystemMessage(
+        `${username} が退出しました`
+      );
+    }
+  }
+);
+
+</script>
+
+</body>
+</html>
