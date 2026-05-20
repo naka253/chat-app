@@ -2,12 +2,13 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
+
 <meta
   name="viewport"
   content="width=device-width, initial-scale=1.0"
 />
 
-<title>チャットアプリ</title>
+<title>Realtime Chat</title>
 
 <style>
 *{
@@ -49,6 +50,7 @@ html,body{
 
   display:flex;
   flex-direction:column;
+
   gap:15px;
 }
 
@@ -56,22 +58,25 @@ html,body{
   text-align:center;
 }
 
+/* 入力 */
 input,
 textarea{
+  width:100%;
+
   padding:14px;
 
   border:none;
 
   border-radius:10px;
 
-  font-size:16px;
-
   outline:none;
+
+  font-size:16px;
 }
 
 /* ボタン */
 button{
-  padding:12px;
+  padding:14px;
 
   border:none;
 
@@ -79,24 +84,13 @@ button{
 
   cursor:pointer;
 
-  color:black;
+  color:white;
+
+  font-size:16px;
 }
 
-/* 個別 */
 #joinBtn{
   background:#5865f2;
-}
-
-#joinVoiceBtn{
-  background:#16a34a;
-}
-
-#muteBtn{
-  background:#ca8a04;
-}
-
-#leaveVoiceBtn{
-  background:#dc2626;
 }
 
 #resetBtn{
@@ -115,15 +109,20 @@ button{
   inset:0;
 
   flex-direction:column;
+
+  background:#1e1f22;
 }
 
+/* 上 */
 .topbar{
   background:#111214;
 
-  padding:10px;
+  padding:12px;
 
   display:flex;
+
   justify-content:space-between;
+
   align-items:center;
 
   gap:10px;
@@ -132,7 +131,6 @@ button{
 .topbar-right{
   display:flex;
   gap:10px;
-  flex-wrap:wrap;
 }
 
 /* メッセージ */
@@ -144,7 +142,9 @@ button{
   padding:15px;
 
   display:flex;
+
   flex-direction:column;
+
   gap:10px;
 }
 
@@ -187,10 +187,10 @@ button{
 
   opacity:0.7;
 
-  margin-bottom:4px;
+  margin-bottom:5px;
 }
 
-/* 入力 */
+/* 入力欄 */
 #messageForm{
   display:flex;
 
@@ -214,15 +214,7 @@ button{
 
 /* オンライン */
 #onlineCount{
-  font-size:13px;
-  margin-top:4px;
-}
-
-#onlineUsers{
-  display:flex;
-  flex-wrap:wrap;
-  gap:5px;
-  margin-top:5px;
+  font-size:14px;
 }
 
 /* スマホ */
@@ -251,12 +243,18 @@ button{
 
   <div class="card">
 
-    <h1>チャットルーム</h1>
+    <h1>Realtime Chat</h1>
 
     <input
       type="text"
       id="usernameInput"
       placeholder="名前"
+    />
+
+    <input
+      type="password"
+      id="roomPasswordInput"
+      placeholder="入室パスワード"
     />
 
     <button id="joinBtn">
@@ -282,23 +280,9 @@ button{
         🟢 0人オンライン
       </div>
 
-      <div id="onlineUsers"></div>
-
     </div>
 
     <div class="topbar-right">
-
-      <button id="joinVoiceBtn">
-        VC参加
-      </button>
-
-      <button id="muteBtn">
-        ミュート
-      </button>
-
-      <button id="leaveVoiceBtn">
-        VC退出
-      </button>
 
       <button id="resetBtn">
         リセット
@@ -334,7 +318,10 @@ button{
 import { createClient }
 from "https://esm.sh/@supabase/supabase-js@2";
 
-/* Supabase */
+/* =======================
+   Supabase設定
+======================= */
+
 const SUPABASE_URL =
 "https://pckmtoxyyzociqkfgwan.supabase.co";
 
@@ -346,7 +333,22 @@ const db = createClient(
   SUPABASE_KEY
 );
 
-/* 要素 */
+/* =======================
+   パスワード設定
+======================= */
+
+/* 入室パスワード */
+const ROOM_PASSWORD =
+"32384626";
+
+/* 管理者パス */
+const ADMIN_PASSWORD =
+"0525";
+
+/* =======================
+   要素
+======================= */
+
 const loginScreen =
 document.getElementById("loginScreen");
 
@@ -356,11 +358,17 @@ document.getElementById("chatScreen");
 const usernameInput =
 document.getElementById("usernameInput");
 
+const roomPasswordInput =
+document.getElementById("roomPasswordInput");
+
 const joinBtn =
 document.getElementById("joinBtn");
 
 const myName =
 document.getElementById("myName");
+
+const onlineCount =
+document.getElementById("onlineCount");
 
 const messages =
 document.getElementById("messages");
@@ -371,50 +379,27 @@ document.getElementById("messageForm");
 const messageInput =
 document.getElementById("messageInput");
 
-const joinVoiceBtn =
-document.getElementById("joinVoiceBtn");
-
-const muteBtn =
-document.getElementById("muteBtn");
-
-const leaveVoiceBtn =
-document.getElementById("leaveVoiceBtn");
-
 const resetBtn =
 document.getElementById("resetBtn");
 
 const leaveBtn =
 document.getElementById("leaveBtn");
 
-/* 管理者パス */
-const ADMIN_PASSWORD =
-"0525";
-
 let username = "";
 
-let localStream = null;
+/* =======================
+   入室
+======================= */
 
-let peerConnections = {};
-
-let isMuted = false;
-
-/* WebRTC */
-const servers = {
-  iceServers:[
-    {
-      urls:
-      "stun:stun.l.google.com:19302"
-    }
-  ]
-};
-
-/* 入室 */
 joinBtn.addEventListener(
   "click",
   async()=>{
 
     const name =
     usernameInput.value.trim();
+
+    const password =
+    roomPasswordInput.value;
 
     if(!name){
 
@@ -423,10 +408,19 @@ joinBtn.addEventListener(
       return;
     }
 
+    if(password !== ROOM_PASSWORD){
+
+      alert(
+        "パスワードが違います"
+      );
+
+      return;
+    }
+
     username = name;
 
     myName.textContent =
-    username;
+    `名前: ${username}`;
 
     loginScreen.style.display =
     "none";
@@ -451,7 +445,7 @@ joinBtn.addEventListener(
 );
 
 /* Enter入室 */
-usernameInput.addEventListener(
+roomPasswordInput.addEventListener(
   "keydown",
   (e)=>{
 
@@ -462,7 +456,10 @@ usernameInput.addEventListener(
   }
 );
 
-/* メッセージ取得 */
+/* =======================
+   メッセージ取得
+======================= */
+
 async function loadMessages(){
 
   const { data, error } =
@@ -488,7 +485,10 @@ async function loadMessages(){
   scrollBottom();
 }
 
-/* 表示 */
+/* =======================
+   表示
+======================= */
+
 function renderMessage(data){
 
   const div =
@@ -498,11 +498,13 @@ function renderMessage(data){
 
     div.className = "system";
 
-    div.textContent = data.text;
+    div.textContent =
+    data.text;
 
   }else{
 
-    div.className = "message";
+    div.className =
+    "message";
 
     div.classList.add(
       data.username === username
@@ -526,7 +528,10 @@ function renderMessage(data){
   scrollBottom();
 }
 
-/* 送信 */
+/* =======================
+   送信
+======================= */
+
 messageForm.addEventListener(
   "submit",
   async(e)=>{
@@ -567,7 +572,10 @@ messageInput.addEventListener(
   }
 );
 
-/* システム */
+/* =======================
+   システムメッセージ
+======================= */
+
 async function addSystemMessage(text){
 
   await db
@@ -579,7 +587,10 @@ async function addSystemMessage(text){
   });
 }
 
-/* リセット */
+/* =======================
+   リセット
+======================= */
+
 resetBtn.addEventListener(
   "click",
   async()=>{
@@ -589,9 +600,8 @@ resetBtn.addEventListener(
       "管理者パスワード"
     );
 
-    if(password === null){
-      return;
-    }
+    if(password === null)
+    return;
 
     if(
       password !==
@@ -625,7 +635,10 @@ resetBtn.addEventListener(
   }
 );
 
-/* 退出 */
+/* =======================
+   退出
+======================= */
+
 leaveBtn.addEventListener(
   "click",
   async()=>{
@@ -643,7 +656,10 @@ leaveBtn.addEventListener(
   }
 );
 
-/* realtime */
+/* =======================
+   リアルタイム
+======================= */
+
 db
 .channel("room1")
 
@@ -665,7 +681,10 @@ db
 
 .subscribe();
 
-/* オンライン */
+/* =======================
+   オンライン人数
+======================= */
+
 async function loadOnlineUsers(){
 
   const { data } =
@@ -680,352 +699,20 @@ async function loadOnlineUsers(){
     )
   )];
 
-  document.getElementById(
-    "onlineCount"
-  ).textContent =
+  onlineCount.textContent =
   `🟢 ${uniqueUsers.length}人オンライン`;
-
-  const container =
-  document.getElementById(
-    "onlineUsers"
-  );
-
-  container.innerHTML = "";
-
-  uniqueUsers.forEach(user=>{
-
-    if(user === username)
-    return;
-
-    const btn =
-    document.createElement(
-      "button"
-    );
-
-    btn.textContent =
-    `📞 ${user}`;
-
-    btn.onclick = ()=>{
-
-      callUser(user);
-    };
-
-    container.appendChild(btn);
-  });
 }
 
-/* 更新 */
+/* 3秒ごと更新 */
 setInterval(
   loadOnlineUsers,
   3000
 );
 
-/* VC参加 */
-joinVoiceBtn.addEventListener(
-  "click",
-  async()=>{
+/* =======================
+   スクロール
+======================= */
 
-    try{
-
-      localStream =
-      await navigator
-      .mediaDevices
-      .getUserMedia({
-        audio:true
-      });
-
-      await addSystemMessage(
-        `${username} がVC参加`
-      );
-
-      alert("VC参加");
-
-    }catch(err){
-
-      console.error(err);
-
-      alert(
-        "マイク許可必要"
-      );
-    }
-  }
-);
-
-/* peer */
-async function createPeer(target){
-
-  const pc =
-  new RTCPeerConnection(
-    servers
-  );
-
-  peerConnections[target] =
-  pc;
-
-  localStream
-  .getTracks()
-  .forEach(track=>{
-
-    pc.addTrack(
-      track,
-      localStream
-    );
-  });
-
-  /* 相手音 */
-  pc.ontrack = (event)=>{
-
-    const audio =
-    document.createElement(
-      "audio"
-    );
-
-    audio.srcObject =
-    event.streams[0];
-
-    audio.autoplay = true;
-
-    document.body
-    .appendChild(audio);
-  };
-
-  /* ICE */
-  pc.onicecandidate =
-  async(event)=>{
-
-    if(event.candidate){
-
-      await sendSignal(
-        target,
-        "ice",
-        event.candidate
-      );
-    }
-  };
-
-  return pc;
-}
-
-/* signal */
-async function sendSignal(
-  receiver,
-  type,
-  data
-){
-
-  await db
-  .from("voice_signals")
-  .insert({
-
-    sender:username,
-
-    receiver,
-
-    type,
-
-    data
-  });
-}
-
-/* call */
-async function callUser(target){
-
-  if(!localStream){
-
-    alert(
-      "先にVC参加"
-    );
-
-    return;
-  }
-
-  const pc =
-  await createPeer(target);
-
-  const offer =
-  await pc.createOffer();
-
-  await pc.setLocalDescription(
-    offer
-  );
-
-  await sendSignal(
-    target,
-    "offer",
-    offer
-  );
-}
-
-/* VC realtime */
-db
-.channel("voice-signals")
-
-.on(
-  "postgres_changes",
-  {
-    event:"INSERT",
-    schema:"public",
-    table:"voice_signals"
-  },
-
-  async(payload)=>{
-
-    const signal =
-    payload.new;
-
-    if(
-      signal.receiver !==
-      username
-    ){
-      return;
-    }
-
-    if(
-      signal.sender ===
-      username
-    ){
-      return;
-    }
-
-    if(
-      !peerConnections[
-        signal.sender
-      ]
-    ){
-
-      await createPeer(
-        signal.sender
-      );
-    }
-
-    const pc =
-    peerConnections[
-      signal.sender
-    ];
-
-    /* offer */
-    if(
-      signal.type ===
-      "offer"
-    ){
-
-      await pc
-      .setRemoteDescription(
-        new RTCSessionDescription(
-          signal.data
-        )
-      );
-
-      const answer =
-      await pc.createAnswer();
-
-      await pc
-      .setLocalDescription(
-        answer
-      );
-
-      await sendSignal(
-        signal.sender,
-        "answer",
-        answer
-      );
-    }
-
-    /* answer */
-    if(
-      signal.type ===
-      "answer"
-    ){
-
-      await pc
-      .setRemoteDescription(
-        new RTCSessionDescription(
-          signal.data
-        )
-      );
-    }
-
-    /* ice */
-    if(
-      signal.type ===
-      "ice"
-    ){
-
-      try{
-
-        await pc
-        .addIceCandidate(
-          new RTCIceCandidate(
-            signal.data
-          )
-        );
-
-      }catch(err){
-
-        console.error(err);
-      }
-    }
-  }
-)
-
-.subscribe();
-
-/* ミュート */
-muteBtn.addEventListener(
-  "click",
-  ()=>{
-
-    if(!localStream)
-    return;
-
-    isMuted = !isMuted;
-
-    localStream
-    .getAudioTracks()
-    .forEach(track=>{
-
-      track.enabled =
-      !isMuted;
-    });
-
-    muteBtn.textContent =
-    isMuted
-    ? "ミュート解除"
-    : "ミュート";
-  }
-);
-
-/* VC退出 */
-leaveVoiceBtn.addEventListener(
-  "click",
-  ()=>{
-
-    if(localStream){
-
-      localStream
-      .getTracks()
-      .forEach(track=>{
-
-        track.stop();
-      });
-    }
-
-    Object.values(
-      peerConnections
-    ).forEach(pc=>{
-
-      pc.close();
-    });
-
-    peerConnections = {};
-
-    localStream = null;
-
-    alert("VC退出");
-  }
-);
-
-/* スクロール */
 function scrollBottom(){
 
   requestAnimationFrame(()=>{
@@ -1035,20 +722,24 @@ function scrollBottom(){
   });
 }
 
-/* XSS */
+/* =======================
+   XSS対策
+======================= */
+
 function escapeHtml(text){
 
   const div =
-  document.createElement(
-    "div"
-  );
+  document.createElement("div");
 
   div.textContent = text;
 
   return div.innerHTML;
 }
 
-/* タブ閉じ */
+/* =======================
+   タブ閉じ
+======================= */
+
 window.addEventListener(
   "beforeunload",
   async()=>{
